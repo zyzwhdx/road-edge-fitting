@@ -4,8 +4,12 @@
 #include <glog/logging.h>
 #include <ctime>
 #include <fstream>
+#include <Eigen/Dense>
+#include <Eigen/Core>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+using namespace std;
+using Eigen::Vector3d;
 using ceres::AutoDiffCostFunction;
 using ceres::CauchyLoss;
 using ceres::CostFunction;
@@ -16,6 +20,7 @@ using ceres::Solver;
 
 Solvepara::Solvepara()
 {
+	this->panel_.major_iter_num = 0;
 }
 
 
@@ -62,6 +67,7 @@ Vector3d Solvepara::readPointsFromTxt(const string &filename, vector<Vector3d> &
 	}
 	//排序
 	sort(points.begin(), points.end(), compPointByY);
+	this->mean_point = mean_coor;
 	return mean_coor;
 }
 
@@ -128,6 +134,45 @@ void Solvepara::segmentPoints(const float &threshold, const vector<Vector3d> &po
 			points_segmented.push_back(points_seg);
 		}
 	}
+
+	for (int i = 0; i < start_points.size() - 1; ++i)
+	{
+		int p_num = points_segmented[i].size();
+		Vector3d sum = points_segmented[i][p_num - 1] + points_segmented[i + 1][1];
+		Vector3d mean = sum / 2.0; //连接点
+
+		// 这一段加在段尾
+		Vector3d fin_p = points_segmented[i].back(); // 这一段的最后一点
+		Vector3d dif = mean - fin_p;
+		double distance = sqrt(dif(0)*dif(0) + dif(1)*dif(1) + dif(2)*dif(2)) + u_init[i].back();
+		points_segmented[i].push_back(mean);
+		u_init[i].push_back(distance);
+
+		// 下一段加在段头
+		Vector3d fst_p = points_segmented[i + 1][0];
+		Vector3d sec_p = points_segmented[i + 1][1];
+		double distance_ori = u_init[i + 1][1];
+		points_segmented[i + 1][0] = mean;
+		dif = mean - sec_p;
+		distance = sqrt(dif(0)*dif(0) + dif(1)*dif(1) + dif(2)*dif(2));
+		for (int j = 1; j < u_init[i + 1].size(); j++)
+		{
+			u_init[i + 1][j] = u_init[i + 1][j] - distance_ori + distance;
+		}
+		start_points[i + 1] = mean;
+	}
+
+	ofstream ofs("segment_points.txt");
+	for (int i = 0; i < points_segmented.size(); i++)
+	{
+		for (int j = 0; j < points_segmented[i].size(); j++)
+		{
+			ofs << to_string(points_segmented[i][j](0) + mean_point(0)) << "," << to_string(points_segmented[i][j](1) + mean_point(1))
+				<< "," << to_string(points_segmented[i][j](2) + mean_point(2)) << ","
+				<< i << "," << u_init[i][j] << endl;
+		}
+	}
+	ofs.close();
 }
 
 void Solvepara::segmentPointsByKnownU(const float &threshold, const vector<Vector3d> &points, const vector<double> &u, vector<vector<Vector3d> > &points_segmented,
@@ -242,7 +287,20 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 			CostFunction *cost =
 				new AutoDiffCostFunction<DistanceFromCurveCost, 2, 3>(
 				new DistanceFromCurveCost(xx, yy, g_iterator, x00, y00));
-			problem.AddResidualBlock(cost, loss, greek_solve);
+			problem.AddResidualBlock(cost, NULL, greek_solve);
+		}
+
+		//连接点约束，加权重
+		if (this->panel_.major_iter_num > 1)
+		{
+			double g_iterator = input_u[i].back();
+			xx = data_points[i].back()(0);
+			yy = data_points[i].back()(1);
+
+			CostFunction *cost =
+				new AutoDiffCostFunction<WeightedDistanceFromCurveCost_0, 2, 3>(
+				new WeightedDistanceFromCurveCost_0(xx, yy, g_iterator, x00, y00, seg_point_number));
+			problem.AddResidualBlock(cost, NULL, greek_solve);
 		}
 
 		problem.SetParameterLowerBound(greek_solve, 0, 0.00);	problem.SetParameterUpperBound(greek_solve, 0, 2 * M_PI);
@@ -430,4 +488,106 @@ vector<double> Solvepara::ccltGlobalBaseU(const vector<vector<double> > &u)
 	}
 
 	return rst;
+}
+
+vector<ZPara> Solvepara::optimizeHeight(const vector<vector<Vector3d> > &points, const vector<vector<double> > &u)
+{
+	/************************************************************************/
+	/*                       分段                                           */
+	/************************************************************************/
+	ofstream ofs("hpara.txt");
+	vector<ZPara> para;
+	for (int i = 0; i < points.size(); ++i)
+	{
+		vector<Vector3d> pointsseg = points[i]; //一大段里所有的点
+		vector<double > useg = u[i]; //一大段里所有的u
+		unsigned int pointnum = pointsseg.size(); //一大段里的点数
+		ZPara seg_para; //一大段的参数
+
+		vector<vector<Vector2d> > UHpair; //每一大段下分小段
+		vector<Vector2d> pair_seg; //每一小段的pair
+		pair_seg.push_back(Vector2d(0.0, pointsseg.front()(2)));
+		for (int j = 1; j < pointnum; ++j)
+		{
+			pair_seg.push_back(Vector2d(useg[j], pointsseg[j](2)));
+			if (pair_seg.size() > 9)
+			{
+				Vector2d cache_h = pair_seg.back();
+				UHpair.push_back(pair_seg);
+				pair_seg.clear();
+				pair_seg.push_back(cache_h);
+			}
+		}
+
+		//最后一小段的情况
+		if (pair_seg.size() > 4)
+		{
+			UHpair.push_back(pair_seg);
+		}
+		else if (pair_seg.size() == 1)
+		{		
+		}
+		else
+		{
+			for (int j = 1; j < pair_seg.size(); ++j)
+				UHpair.back().push_back(pair_seg[j]);
+		}
+
+		// output
+		for (int m = 0; m < UHpair.size(); ++m)
+		{
+			for (int j = 0; j < UHpair[m].size(); ++j)
+			{
+				ofs << i << "," << m << "," << j << "," << UHpair[m][j](0) << "," << UHpair[m][j](1) << endl;
+			}
+		}
+		ofs << endl;
+
+		// 对于每一小段有一个初始高程
+		for (int m = 0; m < UHpair.size(); ++m)
+		{
+			// 每段solve一次
+			Problem problem;
+			double greek[2] = { 0.0, 0.0 };
+			double u00 = UHpair[m][0](0);
+			seg_para.u_start.push_back(u00);
+			double z00 = UHpair[m][0](1);
+			Vector3d greek_v(z00, 0.0, 0.0);
+			for (int n = 0; n < UHpair[m].size(); ++n)
+			{
+				double zz = UHpair[m][n](1);
+				double uu = UHpair[m][n](0) - u00;
+				CostFunction *cost =
+					new AutoDiffCostFunction<WeightedZDistanceFromCurveCost_0, 1, 2>(
+					new WeightedZDistanceFromCurveCost_0(zz, uu, z00, 1.0));
+				problem.AddResidualBlock(cost, NULL, greek);
+
+				if (n == UHpair[m].size()-1)
+				{
+					CostFunction *cost =
+						new AutoDiffCostFunction<WeightedZDistanceFromCurveCost_0, 1, 2>(
+						new WeightedZDistanceFromCurveCost_0(zz, uu, z00, 10.0));
+					problem.AddResidualBlock(cost, NULL, greek);
+				}
+			}
+			problem.SetParameterLowerBound(greek, 0, -0.2);	problem.SetParameterUpperBound(greek, 0, 0.2);
+			problem.SetParameterLowerBound(greek, 1, -0.01); problem.SetParameterUpperBound(greek, 1, 0.01);
+			Solver::Options options;
+			options.max_num_iterations = 1000;
+			options.linear_solver_type = ceres::DENSE_QR;
+			options.minimizer_progress_to_stdout = false;
+			Solver::Summary summary;
+			Solve(options, &problem, &summary);
+
+			std::cout << summary.BriefReport() << "\n";
+
+			greek_v(1) = greek[0]; greek_v(2) = greek[1];
+			
+			seg_para.para.push_back(greek_v);
+		}
+
+		para.push_back(seg_para);
+	}
+	ofs.close();
+	return para;
 }

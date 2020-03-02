@@ -256,3 +256,81 @@ void Display::ZgenerateShapeByGreek(const string &outputFile, const vector<vecto
 
 	free(x); free(y); free(z); free(m);
 }
+
+void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vector<double> > &u, const vector<Vector3d> &greek, const vector<Vector2d> &greek_v,
+	const vector<Vector3d> &start_points, const Vector3d &mean_coor,
+	const vector<ZPara> &zpara)
+{
+	vector<Vector3d> output_points;
+
+	int v_seglabel = 0;
+
+	for (int i = 0; i < greek.size(); ++i)
+	{
+		// 遍历每一段
+		ZPara para = zpara[i];
+		int segment_point_number = int(u[i].back() / 0.001 + 0.5) + 1;
+		double mu_ = greek[i](0);
+		double ka_ = greek[i](1);
+		double ps_ = greek[i](2);
+		double x0_ = start_points[i](0);
+		double y0_ = start_points[i](1);
+
+		double accu_x = 0.0; double accu_y = 0.0;
+		for (int p = 0; p < segment_point_number; ++p)
+		{
+			double s_ = 0.001 * p;
+			double cos_ = cos(mu_ + s_*ka_ + 0.5*ps_*s_*s_);
+			double sin_ = sin(mu_ + s_*ka_ + 0.5*ps_*s_*s_);
+
+			accu_x += cos_ * 0.001; accu_y += sin_ * 0.001;
+
+			// 确定所属的z分段
+			if (v_seglabel + 1 < para.u_start.size() && s_ > para.u_start[v_seglabel + 1])
+				++v_seglabel;
+
+			double ks_ = para.para[v_seglabel](1);
+			double yt_ = para.para[v_seglabel](2);
+			double Vs_ = s_ - para.u_start[v_seglabel];
+
+			double z_plus = Vs_ * ks_ + 0.5*Vs_*Vs_*yt_;
+
+			Vector3d point_;
+			point_(0) = x0_ + accu_x + mean_coor(0); point_(1) = y0_ + accu_y + mean_coor(1); point_(2) = z_plus + para.para[v_seglabel](0) + mean_coor(2);
+			output_points.push_back(point_);
+		}
+	}
+
+	int nSHPType = SHPT_POLYGONZ;
+	const int point_number = output_points.size();
+
+	SHPHandle	hSHPHandle;
+	SHPObject	*psShape;
+	double		*x;
+	double		*y;
+	double		*z;
+	double		*m;
+	int			i;
+
+	x = (double *)malloc(output_points.size() * sizeof(double));
+	y = (double *)malloc(output_points.size() * sizeof(double));
+	z = (double *)malloc(output_points.size() * sizeof(double));
+	m = (double *)malloc(output_points.size() * sizeof(double));
+	string path_t = outputFile;
+	hSHPHandle = SHPCreate(path_t.c_str(), nSHPType);
+
+	for (i = 0; i < point_number; i++)
+	{
+		x[i] = output_points[i](0);
+		y[i] = output_points[i](1);
+		z[i] = output_points[i](2);
+		m[i] = 100.0;
+	}
+	psShape = SHPCreateObject(nSHPType, -1, 0, NULL, NULL,
+		point_number, x, y, z, m);
+	SHPWriteObject(hSHPHandle, -1, psShape);
+	SHPDestroyObject(psShape);
+	SHPClose(hSHPHandle);
+
+	free(x); free(y); free(z); free(m);
+}

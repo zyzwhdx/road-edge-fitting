@@ -12,21 +12,18 @@ using namespace Eigen;
 
 void main()
 {
-	// 根据参数生成曲线shp
-	//const string matlab_para = "E:\\BaiduNetdiskDownload\\MATLAB\\curve_para.txt";
-
 	Solvepara solvepara;
 
 	vector<Vector3d> total_points;
 	int total_point_number;
 	// 从文件中读取点坐标
-	Vector3d mean_coor = solvepara.readPointsFromTxt("./edge.txt", total_points, total_point_number);
+	Vector3d mean_coor = solvepara.readPointsFromTxt("./shortedge.txt", total_points, total_point_number);
 
 	vector<vector<Vector3d> > points_segmented;
 	vector<vector<double> > u_init, u_medi, u_rst;
 	vector<Vector3d> start_points;
 	// 分段
-	solvepara.segmentPoints(200.0, total_points, points_segmented, u_init, start_points);
+	solvepara.segmentPoints(100.0, total_points, points_segmented, u_init, start_points);
 	int segment_number = points_segmented.size();
 
 	// 曲线参数迭代初值
@@ -43,8 +40,9 @@ void main()
 
 	u_medi = u_init; greek_medi = greek_init; greek_v_medi = greek_v_init;
 
-	for (int major_iter = 0; major_iter < 3; major_iter++)
+	for (int major_iter = 0; major_iter < 2; major_iter++)
 	{
+		solvepara.panel_.major_iter_num = major_iter + 1; // 告诉优化器这是第几次循环
 		solvepara.solveParaByFixedU(u_medi, greek_medi, greek_v_medi, points_segmented, greek_rst, greek_v_rst);
 		greek_medi = greek_rst;
 		greek_v_medi = greek_v_rst;
@@ -55,7 +53,6 @@ void main()
 	end = clock();
 	double endtime = (double)(end - start) / CLOCKS_PER_SEC;
 	cout << endl << "Total time:" << endtime << "s" << endl;		//s为单位
-
 
 	// 高程方向优化
 	vector<double> global_u = solvepara.translateUtoGlobal(u_medi);
@@ -68,7 +65,19 @@ void main()
 
 	Display display;
 	const string output_shape = "curve_vec.shp";
-	display.ZgenerateShapeByGreek(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, Zstart, base_u, base_v);
+	//display.ZgenerateShapeByGreek(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, Zstart, base_u, base_v);
+	vector<ZPara> zpara = solvepara.optimizeHeight(points_segmented, u_medi);
+	display.ZgenerateShapeByZPara(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, zpara);
+
+
+	ofstream ofs("u.txt");
+	for (int i = 0; i < u_medi.size(); i++)
+	{
+		for (int j = 0; j < u_medi[i].size(); j++)
+		{
+			ofs << i << "," << j << "," << u_medi[i][j] << endl;
+		}
+	}
 
 	int pp;
 	std::cin >> pp;
