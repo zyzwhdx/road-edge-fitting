@@ -570,7 +570,7 @@ vector<ZPara> Solvepara::optimizeHeight(const vector<vector<Vector3d> > &points,
 					problem.AddResidualBlock(cost, NULL, greek);
 				}
 			}
-			problem.SetParameterLowerBound(greek, 0, -0.2);	problem.SetParameterUpperBound(greek, 0, 0.2);
+			problem.SetParameterLowerBound(greek, 0, -0.2);  problem.SetParameterUpperBound(greek, 0, 0.2);
 			problem.SetParameterLowerBound(greek, 1, -0.01); problem.SetParameterUpperBound(greek, 1, 0.01);
 			Solver::Options options;
 			options.max_num_iterations = 1000;

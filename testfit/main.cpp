@@ -17,13 +17,13 @@ void main()
 	vector<Vector3d> total_points;
 	int total_point_number;
 	// 从文件中读取点坐标
-	Vector3d mean_coor = solvepara.readPointsFromTxt("./shortedge.txt", total_points, total_point_number);
+	Vector3d mean_coor = solvepara.readPointsFromTxt("./shortmark.txt", total_points, total_point_number);
 
 	vector<vector<Vector3d> > points_segmented;
 	vector<vector<double> > u_init, u_medi, u_rst;
 	vector<Vector3d> start_points;
 	// 分段
-	solvepara.segmentPoints(100.0, total_points, points_segmented, u_init, start_points);
+	solvepara.segmentPoints(200.0, total_points, points_segmented, u_init, start_points);
 	int segment_number = points_segmented.size();
 
 	// 曲线参数迭代初值
@@ -55,13 +55,12 @@ void main()
 	cout << endl << "Total time:" << endtime << "s" << endl;		//s为单位
 
 	// 高程方向优化
-	vector<double> global_u = solvepara.translateUtoGlobal(u_medi);
-	vector<vector<double> > Vu_init; vector<vector<Vector3d> > Vpoints_segmented; vector<Vector3d> Vstart_points;
-	solvepara.segmentPointsByKnownU(30.0, total_points, global_u, Vpoints_segmented, Vu_init, Vstart_points);
-	vector<double> Zstart = solvepara.ZsolveParaByFixedU(Vu_init, Vpoints_segmented, greek_v_rst);
-
-	vector<double> base_u = solvepara.ccltGlobalBaseU(u_medi);  //水平线形u转换
-	vector<double> base_v = solvepara.ccltGlobalBaseU(Vu_init); //垂直线形转换
+	//vector<double> global_u = solvepara.translateUtoGlobal(u_medi);
+	//vector<vector<double> > Vu_init; vector<vector<Vector3d> > Vpoints_segmented; vector<Vector3d> Vstart_points;
+	//solvepara.segmentPointsByKnownU(30.0, total_points, global_u, Vpoints_segmented, Vu_init, Vstart_points);
+	//vector<double> Zstart = solvepara.ZsolveParaByFixedU(Vu_init, Vpoints_segmented, greek_v_rst);
+	//vector<double> base_u = solvepara.ccltGlobalBaseU(u_medi);  //水平线形u转换
+	//vector<double> base_v = solvepara.ccltGlobalBaseU(Vu_init); //垂直线形转换
 
 	Display display;
 	const string output_shape = "curve_vec.shp";

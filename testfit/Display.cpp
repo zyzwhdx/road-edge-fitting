@@ -263,12 +263,13 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 {
 	vector<Vector3d> output_points;
 
-	int v_seglabel = 0;
+	int v_seglabel;
 
 	for (int i = 0; i < greek.size(); ++i)
 	{
 		// ±éÀúÃ¿Ò»¶Î
 		ZPara para = zpara[i];
+		v_seglabel = 0;
 		int segment_point_number = int(u[i].back() / 0.001 + 0.5) + 1;
 		double mu_ = greek[i](0);
 		double ka_ = greek[i](1);
