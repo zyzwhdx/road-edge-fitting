@@ -261,6 +261,9 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 	const vector<Vector3d> &start_points, const Vector3d &mean_coor,
 	const vector<ZPara> &zpara)
 {
+	ofstream ofs("curvature.txt");
+	ofstream ofs_dir("direction.txt");
+
 	vector<Vector3d> output_points;
 
 	int v_seglabel;
@@ -299,8 +302,20 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 			Vector3d point_;
 			point_(0) = x0_ + accu_x + mean_coor(0); point_(1) = y0_ + accu_y + mean_coor(1); point_(2) = z_plus + para.para[v_seglabel](0) + mean_coor(2);
 			output_points.push_back(point_);
+
+			// Êä³öÇúÂÊ
+			if (p % 10 == 0)
+			{
+				double curvature = s_*ps_ + ka_;
+				ofs << to_string(point_(0)) << "," << to_string(point_(1)) << "," << to_string(point_(2)) << "," << to_string(abs(curvature * 1000000)) << endl;
+
+				double direction = mu_ + s_*ka_ + 0.5*ps_*s_*s_;
+				ofs_dir << to_string(point_(0)) << "," << to_string(point_(1)) << "," << to_string(point_(2)) << "," << to_string(abs(direction * 1000)) << endl;
+			}
 		}
 	}
+
+	ofs.close();
 
 	int nSHPType = SHPT_POLYGONZ;
 	const int point_number = output_points.size();

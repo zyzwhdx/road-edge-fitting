@@ -74,6 +74,14 @@ public:
 private:
 	vector<Vector3d> ccltIntegralVector(const Vector3d &start_point, const Vector3d &greek, const Vector2d &greek_v, const double &length);
 	long ccltNearestPointIndex(const Vector3d &ref_point, const vector<Vector3d> &curve);
+
+	// 计算每一段结束或者末尾的时候的direction指向，返回角度值，范围0-2*pi
+	double ccltDirectionConstraint2D(const vector<Vector3d> &points);
+
+	// 和上面一个函数目的相同，用PCA
+	double PCAccltDirectionConstraint2D(const vector<Vector3d> &points);
+
+	Vector2d ccltBeginEndDir2D(const vector<vector<Vector3d> > &data_points, const int &i);
 };
 
 // 没有权重的控制点
@@ -182,6 +190,48 @@ public:
 private:
 	// u是积分终止里程
 	double zz_, u_, z0_, w_;
+};
+
+// 直线拟合
+class DirectionCost2D {
+public:
+	DirectionCost2D(double xx, double yy) : xx_(xx), yy_(yy){}
+	template <typename T> bool operator()(
+		const T* const para,		// 待优化的参数,直线参数2dimension
+		T* residual) const {
+
+		T y_predicted = ceres::tan(para[0])*T(xx_) + para[1];
+
+		residual[0] = T(yy_) - y_predicted;
+		return true;
+	}
+
+private:
+	// u是积分终止里程
+	double xx_, yy_;
+};
+
+// 两段间的方向连接
+class DirectionConnection2D {
+public:
+	DirectionConnection2D(double dir1, double dir2, double length) : dir1_(dir1), dir2_(dir2), length_(length){}
+
+	template <typename T> bool operator()(
+		const T* const para,		// 待优化的参数，缓和曲线的参数3dimension
+		T* residual) const {
+
+		T dir_begin = para[0];
+		T dir_end = para[0] + para[1] * T(length_) + para[2] * T(length_)*T(length_)*0.5;
+
+		residual[0] = (T(dir1_) - dir_begin)*ceres::sqrt(100);
+		residual[1] = (T(dir2_) - dir_end)*ceres::sqrt(100);
+
+		return true;
+	}
+
+private:
+	// u是积分终止里程
+	double dir1_, dir2_, length_;
 };
 
 bool compPointByY(const Vector3d &a, const Vector3d &b);

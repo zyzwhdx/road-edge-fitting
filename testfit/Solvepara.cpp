@@ -8,6 +8,11 @@
 #include <Eigen/Core>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <ceres/loss_function.h>
+#include <opencv2/core/types_c.h>
+#include <opencv2/core/core_c.h>
+#include <cmath>
+#include <math.h>
 using namespace std;
 using Eigen::Vector3d;
 using ceres::AutoDiffCostFunction;
@@ -287,10 +292,10 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 			CostFunction *cost =
 				new AutoDiffCostFunction<DistanceFromCurveCost, 2, 3>(
 				new DistanceFromCurveCost(xx, yy, g_iterator, x00, y00));
-			problem.AddResidualBlock(cost, NULL, greek_solve);
+			problem.AddResidualBlock(cost, new CauchyLoss(0.1), greek_solve);
 		}
 
-		//连接点约束，加权重
+		//连接点约束，加权，仅当迭代次数大于1的时候加
 		if (this->panel_.major_iter_num > 1)
 		{
 			double g_iterator = input_u[i].back();
@@ -303,12 +308,28 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 			problem.AddResidualBlock(cost, NULL, greek_solve);
 		}
 
+		// 连接方向约束，加权，仅当迭代次数大于1的时候加
+		// 选参考点的方式有所不同
+		Vector2d refdir;
+		if (this->panel_.major_iter_num >= 1)
+		{
+			Vector2d dir = ccltBeginEndDir2D(data_points, i); //开始和结尾的方向约束
+			refdir = dir;
+			double length = input_u[i].back();
+
+			CostFunction *cost =
+				new AutoDiffCostFunction<DirectionConnection2D, 2, 3>(
+				new DirectionConnection2D(dir(0), dir(1), length));
+			problem.AddResidualBlock(cost, NULL, greek_solve);
+		}
+
+		// 待优化参数范围
 		problem.SetParameterLowerBound(greek_solve, 0, 0.00);	problem.SetParameterUpperBound(greek_solve, 0, 2 * M_PI);
-		problem.SetParameterLowerBound(greek_solve, 1, -0.05);	problem.SetParameterUpperBound(greek_solve, 1, 0.05);
+		problem.SetParameterLowerBound(greek_solve, 1, -0.05);problem.SetParameterUpperBound(greek_solve, 1, 0.05);
 		problem.SetParameterLowerBound(greek_solve, 2, -0.0025);problem.SetParameterUpperBound(greek_solve, 2, 0.0025);
 
 		Solver::Options options;
-		options.max_num_iterations = 1000;
+		options.max_num_iterations = 20;
 		options.linear_solver_type = ceres::DENSE_QR;
 		options.minimizer_progress_to_stdout = true;
 		Solver::Summary summary;
@@ -316,10 +337,16 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 		std::cout << "---------- segment:  " << i + 1 << " / " << segment_number << "  ------------" << endl;
 		Solve(options, &problem, &summary);
 
+		// 参考方向和计算方向对比
+		std::cout << "ref_dir: " << to_string(refdir(0)) << "  rst_dir: " << to_string(greek_solve[0]) << endl;
+		std::cout << "ref_dir: " << to_string(refdir(1)) << "  rst_dir: " << to_string(greek_solve[0] + greek_solve[1] * input_u[i].back() 
+			+ 0.5*greek_solve[2] * input_u[i].back() *input_u[i].back()) << endl;
+
 		std::cout << summary.BriefReport() << "\n";
 		std::cout << to_string(greek_i[0]) << "--->" << to_string(greek_solve[0]) << endl;
 		std::cout << to_string(greek_i[1]) << "--->" << to_string(greek_solve[1]) << endl;
 		std::cout << to_string(greek_i[2]) << "--->" << to_string(greek_solve[2]) << endl;
+		std::cout << "length: " << to_string(input_u[i].back()) << endl;
 		std::cout << "---------- segment:  " << i + 1 << " / " << segment_number << "  ------------" << endl;
 
 		std::cout << endl << endl;
@@ -328,6 +355,78 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 		output_greek[i](1) = greek_solve[1];
 		output_greek[i](2) = greek_solve[2];
 	}
+}
+
+Vector2d Solvepara::ccltBeginEndDir2D(const vector<vector<Vector3d> > &data_points, const int &i)
+{
+	Vector2d rst;
+	int segment_number = data_points.size();
+	vector<Vector3d> dirP;
+	if (i == 0) //第一段
+	{
+		for (int m = 0; m < 10; m++)
+			dirP.push_back(data_points[i][m]);
+		double dir = PCAccltDirectionConstraint2D(dirP);
+		rst(0) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+
+		dirP.clear();
+		for (int m = 0; m < 6; m++)
+			dirP.push_back(data_points[i][data_points[i].size() - 6 + m]);
+		for (int m = 0; m < 5; m++)
+			dirP.push_back(data_points[i + 1][m + 1]);
+		dir = PCAccltDirectionConstraint2D(dirP);
+		rst(1) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+	}
+	else if (i == segment_number - 1) //最后一段
+	{
+		if (data_points[i].size() < 12) // 如果最后一段点数太少
+		{
+			for (int p = 0; p < data_points[i].size(); p++)
+				dirP.push_back(data_points[i][p]);
+			rst(0) = PCAccltDirectionConstraint2D(dirP);
+			rst(1) = rst(0);
+			return rst;
+			cout << "PCA dir: " << to_string(rst(0)) << endl;
+			cout << "PCA dir: " << to_string(rst(0)) << endl;
+		}
+
+		for (int m = 0; m < 6; m++)
+			dirP.push_back(data_points[i - 1][data_points[i - 1].size() - 6 + m]);
+		for (int m = 0; m < 5; m++)
+			dirP.push_back(data_points[i][m + 1]);
+		double dir = PCAccltDirectionConstraint2D(dirP);
+		rst(0) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+
+		dirP.clear();
+		for (int m = 0; m < 10; m++)
+			dirP.push_back(data_points[i][data_points[i].size() - 10 + m]);
+		dir = PCAccltDirectionConstraint2D(dirP);
+		rst(1) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+	}
+	else
+	{
+		for (int m = 0; m < 6; m++)
+			dirP.push_back(data_points[i - 1][data_points[i - 1].size() - 6 + m]);
+		for (int m = 0; m < 5; m++)
+			dirP.push_back(data_points[i][m + 1]);
+		double dir = PCAccltDirectionConstraint2D(dirP);
+		rst(0) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+
+		dirP.clear();
+		for (int m = 0; m < 6; m++)
+			dirP.push_back(data_points[i][data_points[i].size() - 6 + m]);
+		for (int m = 0; m < 5; m++)
+			dirP.push_back(data_points[i + 1][m + 1]);
+		dir = PCAccltDirectionConstraint2D(dirP);
+		rst(1) = dir;
+		cout << "PCA dir: " << to_string(dir) << endl;
+	}
+	return rst;
 }
 
 vector<double> Solvepara::translateUtoGlobal(const vector<vector<double> > &u)
@@ -510,7 +609,7 @@ vector<ZPara> Solvepara::optimizeHeight(const vector<vector<Vector3d> > &points,
 		for (int j = 1; j < pointnum; ++j)
 		{
 			pair_seg.push_back(Vector2d(useg[j], pointsseg[j](2)));
-			if (pair_seg.size() > 9)
+			if (pair_seg.size() > 19)
 			{
 				Vector2d cache_h = pair_seg.back();
 				UHpair.push_back(pair_seg);
@@ -573,9 +672,10 @@ vector<ZPara> Solvepara::optimizeHeight(const vector<vector<Vector3d> > &points,
 			problem.SetParameterLowerBound(greek, 0, -0.2);  problem.SetParameterUpperBound(greek, 0, 0.2);
 			problem.SetParameterLowerBound(greek, 1, -0.01); problem.SetParameterUpperBound(greek, 1, 0.01);
 			Solver::Options options;
-			options.max_num_iterations = 1000;
+			options.max_num_iterations = 20;
 			options.linear_solver_type = ceres::DENSE_QR;
 			options.minimizer_progress_to_stdout = false;
+
 			Solver::Summary summary;
 			Solve(options, &problem, &summary);
 
@@ -590,4 +690,63 @@ vector<ZPara> Solvepara::optimizeHeight(const vector<vector<Vector3d> > &points,
 	}
 	ofs.close();
 	return para;
+}
+
+//求直线方向2D
+double Solvepara::ccltDirectionConstraint2D(const vector<Vector3d> &points)
+{
+	Problem problem;
+	double para[2] = { 1.0, 0.0 };
+
+	for (int i = 0; i < points.size(); ++i)
+	{
+		double xx = points[i](0);
+		double yy = points[i](1);
+
+		CostFunction *cost =
+			new AutoDiffCostFunction<DirectionCost2D, 1, 2>(
+			new DirectionCost2D(xx, yy));
+		problem.AddResidualBlock(cost, new CauchyLoss(0.1), para);
+	}
+
+	Solver::Options options;
+	options.max_num_iterations = 1000;
+	options.linear_solver_type = ceres::DENSE_QR;
+	options.minimizer_progress_to_stdout = false;
+
+	Solver::Summary summary;
+	Solve(options, &problem, &summary);
+
+	if (para[0] < 0)
+		para[0] += M_PI;
+
+	return para[0];
+}
+
+double Solvepara::PCAccltDirectionConstraint2D(const vector<Vector3d> &points)
+{
+	CvMat *pData = cvCreateMat(points.size(), 3, CV_32FC1);
+	CvMat *pMean = cvCreateMat(1, 3, CV_32FC1);
+	CvMat *pEigVals = cvCreateMat(1, 3, CV_32FC1);
+	CvMat *pEigVecs = cvCreateMat(3, 3, CV_32FC1);
+
+	for (int k = 0; k < points.size(); ++k) 
+	{
+		cvmSet(pData, k, 0, points[k](0));
+		cvmSet(pData, k, 1, points[k](1));
+		cvmSet(pData, k, 2, 0.0);
+	}
+	cvCalcPCA(pData, pMean, pEigVals, pEigVecs, CV_PCA_DATA_AS_ROW);
+
+	double xx = cvmGet(pEigVecs, 0, 0);
+	double yy = cvmGet(pEigVecs, 0, 1);
+	double zz = cvmGet(pEigVecs, 0, 2);
+
+	double rst = atan(yy / xx);
+	if (rst < 0)
+	{
+		rst += M_PI;
+	}
+
+	return rst;
 }

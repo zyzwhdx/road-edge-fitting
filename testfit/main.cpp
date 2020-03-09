@@ -17,7 +17,7 @@ void main()
 	vector<Vector3d> total_points;
 	int total_point_number;
 	// 从文件中读取点坐标
-	Vector3d mean_coor = solvepara.readPointsFromTxt("./shortmark.txt", total_points, total_point_number);
+	Vector3d mean_coor = solvepara.readPointsFromTxt("./midmark.txt", total_points, total_point_number);
 
 	vector<vector<Vector3d> > points_segmented;
 	vector<vector<double> > u_init, u_medi, u_rst;
