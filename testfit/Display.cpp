@@ -263,7 +263,7 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 {
 	ofstream ofs("curvature.txt");
 	ofstream ofs_dir("direction.txt");
-
+	double step_ = 0.01;
 	vector<Vector3d> output_points;
 
 	int v_seglabel;
@@ -273,7 +273,7 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 		// 遍历每一段
 		ZPara para = zpara[i];
 		v_seglabel = 0;
-		int segment_point_number = int(u[i].back() / 0.001 + 0.5) + 1;
+		int segment_point_number = int(u[i].back() / step_ + 0.5) + 1;
 		double mu_ = greek[i](0);
 		double ka_ = greek[i](1);
 		double ps_ = greek[i](2);
@@ -283,11 +283,11 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 		double accu_x = 0.0; double accu_y = 0.0;
 		for (int p = 0; p < segment_point_number; ++p)
 		{
-			double s_ = 0.001 * p;
+			double s_ = step_ * p;
 			double cos_ = cos(mu_ + s_*ka_ + 0.5*ps_*s_*s_);
 			double sin_ = sin(mu_ + s_*ka_ + 0.5*ps_*s_*s_);
 
-			accu_x += cos_ * 0.001; accu_y += sin_ * 0.001;
+			accu_x += cos_ * step_; accu_y += sin_ * step_;
 
 			// 确定所属的z分段
 			if (v_seglabel + 1 < para.u_start.size() && s_ > para.u_start[v_seglabel + 1])

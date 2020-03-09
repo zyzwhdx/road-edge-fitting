@@ -84,6 +84,9 @@ private:
 	Vector2d ccltBeginEndDir2D(const vector<vector<Vector3d> > &data_points, const int &i);
 };
 
+/************************************************************************/
+/*      STEP SIZE                  !!!!                                 */
+/************************************************************************/
 // 没有权重的控制点
 class DistanceFromCurveCost {
 public:
@@ -95,17 +98,18 @@ public:
 		double g_iterator = u_;
 		double start_point_solve_greek_x = x0_;
 		double start_point_solve_greek_y = y0_;
+		double step_ = 0.01; //ATTENTION
 
-		T x_predicted = ceres::cos(greek[0])*0.5*0.001 + start_point_solve_greek_x;
-		T y_predicted = ceres::sin(greek[0])*0.5*0.001 + start_point_solve_greek_y;
+		T x_predicted = ceres::cos(greek[0])*0.5*step_ + start_point_solve_greek_x;
+		T y_predicted = ceres::sin(greek[0])*0.5*step_ + start_point_solve_greek_y;
 
-		for (long i = 0; i*0.001 < g_iterator; ++i)
+		for (long i = 0; i*step_ < g_iterator; ++i)
 		{
-			x_predicted += 2 * 0.5 * 0.001*ceres::cos(greek[0] + greek[1] * T(i)*0.001 + 0.5*greek[2] * T(i)*T(i)*0.001*0.001);
-			y_predicted += 2 * 0.5 * 0.001*ceres::sin(greek[0] + greek[1] * T(i)*0.001 + 0.5*greek[2] * T(i)*T(i)*0.001*0.001);
+			x_predicted += 2 * 0.5 * step_*ceres::cos(greek[0] + greek[1] * T(i)*step_ + 0.5*greek[2] * T(i)*T(i)*step_*step_);
+			y_predicted += 2 * 0.5 * step_*ceres::sin(greek[0] + greek[1] * T(i)*step_ + 0.5*greek[2] * T(i)*T(i)*step_*step_);
 		}
 
-		double f_step = g_iterator - floor(1000 * g_iterator) / 1000.0;
+		double f_step = g_iterator - floor(100 * g_iterator) / 100.0;
 		x_predicted += 0.5 * T(f_step)*ceres::cos(greek[0] + greek[1] * T(g_iterator) + 0.5*greek[2] * T(g_iterator)*T(g_iterator));
 		y_predicted += 0.5 * T(f_step)*ceres::sin(greek[0] + greek[1] * T(g_iterator) + 0.5*greek[2] * T(g_iterator)*T(g_iterator));
 
@@ -131,17 +135,18 @@ public:
 		double g_iterator = u_;
 		double start_point_solve_greek_x = x0_;
 		double start_point_solve_greek_y = y0_;
+		double step_ = 0.01; //ATTENTION
 
-		T x_predicted = ceres::cos(greek[0])*0.5*0.001 + start_point_solve_greek_x;
-		T y_predicted = ceres::sin(greek[0])*0.5*0.001 + start_point_solve_greek_y;
+		T x_predicted = ceres::cos(greek[0])*0.5*step_ + start_point_solve_greek_x;
+		T y_predicted = ceres::sin(greek[0])*0.5*step_ + start_point_solve_greek_y;
 
-		for (long i = 0; i*0.001 < g_iterator; ++i)
+		for (long i = 0; i*step_ < g_iterator; ++i)
 		{
-			x_predicted += 2 * 0.5 * 0.001*ceres::cos(greek[0] + greek[1] * T(i)*0.001 + 0.5*greek[2] * T(i)*T(i)*0.001*0.001);
-			y_predicted += 2 * 0.5 * 0.001*ceres::sin(greek[0] + greek[1] * T(i)*0.001 + 0.5*greek[2] * T(i)*T(i)*0.001*0.001);
+			x_predicted += 2 * 0.5 * step_*ceres::cos(greek[0] + greek[1] * T(i)*step_ + 0.5*greek[2] * T(i)*T(i)*step_*step_);
+			y_predicted += 2 * 0.5 * step_*ceres::sin(greek[0] + greek[1] * T(i)*step_ + 0.5*greek[2] * T(i)*T(i)*step_*step_);
 		}
 
-		double f_step = g_iterator - floor(1000 * g_iterator) / 1000.0;
+		double f_step = g_iterator - floor(100 * g_iterator) / 100.0;
 		x_predicted += 0.5 * T(f_step)*ceres::cos(greek[0] + greek[1] * T(g_iterator) + 0.5*greek[2] * T(g_iterator)*T(g_iterator));
 		y_predicted += 0.5 * T(f_step)*ceres::sin(greek[0] + greek[1] * T(g_iterator) + 0.5*greek[2] * T(g_iterator)*T(g_iterator));
 

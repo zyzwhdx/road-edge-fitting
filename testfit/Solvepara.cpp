@@ -235,6 +235,10 @@ void Solvepara::segmentPointsByKnownU(const float &threshold, const vector<Vecto
 	points_segmented.push_back(points_seg);
 }
 
+
+/************************************************************************/
+/*   ATTENTION STEP SIZE                                                */
+/************************************************************************/
 void Solvepara::solveUByFixedPara(const vector<vector<double> > &input_u, const vector<Vector3d> &greek, const vector<Vector2d> &greek_v,
 	const vector<vector<Vector3d> > &data_points, vector<vector<double> > &output_u)
 {
@@ -251,7 +255,7 @@ void Solvepara::solveUByFixedPara(const vector<vector<double> > &input_u, const 
 		for (int j = 1; j < segment_point_number; ++j)
 		{
 			long pos = ccltNearestPointIndex(data_points[i][j], coordinates);
-			output_u[i][j] = pos * 0.001;
+			output_u[i][j] = pos * 0.01; //ATTENTION
 		}
 		cout << "---------UPDATE U: segment " << i + 1 << " / " << segment_number << "------------" << endl << endl;
 	}
@@ -454,7 +458,7 @@ vector<double> Solvepara::translateUtoGlobal(const vector<vector<double> > &u)
 
 vector<Vector3d> Solvepara::ccltIntegralVector(const Vector3d &start_point, const Vector3d &greek, const Vector2d &greek_v, const double &length)
 {
-	double step = 0.001;
+	double step = 0.01; //ATTENTION
 	double gene_length = floor((length + 20.0) * 100 + 0.5) / 100.0;
 
 	vector<double> ref; //离散的求积分节点
