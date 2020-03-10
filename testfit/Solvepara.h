@@ -41,6 +41,8 @@ public:
 	// 读取所有点，平移，根据y坐标排序。 输出平均坐标
 	Vector3d readPointsFromTxt(const string &filename, vector<Vector3d> &points, int &point_number_total);
 
+	void ransacExtractCircles(const vector<Vector3d> &points);
+
 	// 分段
 	void segmentPoints(const float &threshold, //分段长度阈值
 		const vector<Vector3d> &points, //输入边界点

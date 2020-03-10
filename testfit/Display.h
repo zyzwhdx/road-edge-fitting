@@ -11,6 +11,9 @@ using Eigen::Vector2d;
 class Display
 {
 public:
+	Display();
+	~Display();
+
 	// 根据matlab输出的para文件输出shape文件
 	void generateShapeByParaFile(const string &parafile, const string &outputFile);
 
@@ -25,9 +28,13 @@ public:
 
 	void ZgenerateShapeByZPara(const string &outputFile, const vector<vector<double> > &u, const vector<Vector3d> &greek, const vector<Vector2d> &greek_v,
 		const vector<Vector3d> &start_points, const Vector3d &mean_coor,
-		const vector<ZPara> &zpara);
+		const vector<ZPara> &zpara, const vector<vector<Vector3d> > &data);
 
-	Display();
-	~Display();
+private:
+	double CosIntegral(const Vector3d &para, const double &up);
+	double SinIntegral(const Vector3d &para, const double &up);
+
+	//返回最近点的z值
+	double findNearestZ(const vector<Vector3d> &points, const Vector3d &ref);
 };
 

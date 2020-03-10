@@ -19,6 +19,8 @@ void main()
 	// 从文件中读取点坐标
 	Vector3d mean_coor = solvepara.readPointsFromTxt("./midmark.txt", total_points, total_point_number);
 
+	solvepara.ransacExtractCircles(total_points);
+
 	vector<vector<Vector3d> > points_segmented;
 	vector<vector<double> > u_init, u_medi, u_rst;
 	vector<Vector3d> start_points;
@@ -29,11 +31,6 @@ void main()
 	// 曲线参数迭代初值
 	vector<Vector3d> greek_init(segment_number), greek_medi, greek_rst;
 	vector<Vector2d> greek_v_init(segment_number), greek_v_medi, greek_v_rst;
-	for (int i = 0; i < segment_number; ++i)
-	{
-		greek_init[i](0) = 1.90; greek_init[i](1) = 0.0; greek_init[i](2) = 0.0;
-		greek_v_init[i](0) = 0.0; greek_v_init[i](1) = 0.0;
-	}
 
 	clock_t start, end;
 	start = clock();
@@ -66,8 +63,7 @@ void main()
 	const string output_shape = "curve_vec.shp";
 	//display.ZgenerateShapeByGreek(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, Zstart, base_u, base_v);
 	vector<ZPara> zpara = solvepara.optimizeHeight(points_segmented, u_medi);
-	display.ZgenerateShapeByZPara(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, zpara);
-
+	display.ZgenerateShapeByZPara(output_shape, u_medi, greek_medi, greek_v_rst, start_points, mean_coor, zpara, points_segmented);
 
 	ofstream ofs("u.txt");
 	for (int i = 0; i < u_medi.size(); i++)

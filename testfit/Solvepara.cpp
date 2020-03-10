@@ -13,7 +13,21 @@
 #include <opencv2/core/core_c.h>
 #include <cmath>
 #include <math.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/point_cloud.h>
+#include <pcl/kdtree/kdtree_flann.h>
 using namespace std;
+using namespace pcl;
 using Eigen::Vector3d;
 using ceres::AutoDiffCostFunction;
 using ceres::CauchyLoss;
@@ -272,15 +286,17 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 	for (int i = 0; i < segment_number; i++)
 	{
 		int seg_point_number = data_points[i].size(); //一段里有多少点
-		// 第一次大循环直接采用init值作为初值
+		// 第一次大循环通过计算得到初值
 		double greek_i[3] = { greek_input[i](0), greek_input[i](1), greek_input[i](2) };
 		double greek_solve[3] = { greek_input[i](0), greek_input[i](1), greek_input[i](2) };
+		if (panel_.major_iter_num < 2)
+		{
+			greek_i[0] = ccltBeginEndDir2D(data_points, i)(0); greek_i[1] = 0.0; greek_i[2] = 0.0;
+			greek_solve[0] = greek_i[0]; greek_solve[1] = 0.0; greek_solve[2] = 0.0;
+		}
 
 		// 每段solve一次
 		Problem problem;
-
-		// Configure the loss function.
-		LossFunction* loss = NULL;
 
 		// Add the residuals.
 		double xx, yy;
@@ -315,7 +331,7 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 		// 连接方向约束，加权，仅当迭代次数大于1的时候加
 		// 选参考点的方式有所不同
 		Vector2d refdir;
-		if (this->panel_.major_iter_num >= 1)
+		if (this->panel_.major_iter_num > 1)
 		{
 			Vector2d dir = ccltBeginEndDir2D(data_points, i); //开始和结尾的方向约束
 			refdir = dir;
@@ -339,6 +355,7 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 		Solver::Summary summary;
 
 		std::cout << "---------- segment:  " << i + 1 << " / " << segment_number << "  ------------" << endl;
+		std::cout << "major iteration: " << panel_.major_iter_num << endl;
 		Solve(options, &problem, &summary);
 
 		// 参考方向和计算方向对比
@@ -753,4 +770,72 @@ double Solvepara::PCAccltDirectionConstraint2D(const vector<Vector3d> &points)
 	}
 
 	return rst;
+}
+
+// ransac提取圆弧
+void Solvepara::ransacExtractCircles(const vector<Vector3d> &points)
+{
+	ofstream ofs("ransac.txt");
+	// 拷贝点云
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_circle(new pcl::PointCloud<pcl::PointXYZ>);
+
+	for (int i = 0; i < points.size(); i++)
+	{
+		PointXYZ p;
+		p.x = points[i](0); p.y = points[i](1); p.z = 0.0;
+		cloud->points.push_back(p);
+	}
+	cloud->width = cloud->points.size();
+	cloud->height = 1;
+	cloud->points.resize(cloud->width * cloud->height);
+
+	//ransac
+	pcl::SACSegmentation<pcl::PointXYZ> seg;
+	pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_line(new pcl::PointCloud<pcl::PointXYZ>());
+
+	seg.setOptimizeCoefficients(true);
+	seg.setModelType(pcl::SACMODEL_CIRCLE2D);
+	seg.setMethodType(pcl::SAC_RANSAC);
+	seg.setMaxIterations(1000);
+	seg.setDistanceThreshold(0.1);
+
+	int label = 0;
+	while (cloud->points.size() > 10)
+	{
+		// Segment the largest planar component from the remaining cloud
+		seg.setInputCloud(cloud);
+		seg.segment(*inliers, *coefficients);
+		if (inliers->indices.size() == 0)
+		{
+			std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
+			break; // 如果剩下的点中没有一个圆弧,则剩下的点都是outliers
+		}
+
+		// Extract the planar inliers from the input cloud
+		pcl::ExtractIndices<pcl::PointXYZ> extract;
+		extract.setInputCloud(cloud);
+		extract.setIndices(inliers);
+		extract.setNegative(false);
+
+		// Get the points associated with the planar surface
+		extract.filter(*cloud_circle);
+
+		// Remove the planar inliers, extract the rest
+		extract.setNegative(true);
+		extract.filter(*cloud_f);
+		*cloud = *cloud_f;
+
+		for (int i = 0; i < cloud_circle->points.size(); i++)
+		{
+			PointXYZ pxy = cloud_circle->points[i];
+			ofs << to_string(pxy.x + mean_point(0)) << "," << to_string(pxy.y + mean_point(1)) << "," << 0.0 << "," << label << endl;
+		}
+		label++;
+	}
+	ofs.close();
+	cout << "ransac circle extraction complete" << endl;
 }

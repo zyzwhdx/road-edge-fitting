@@ -259,20 +259,23 @@ void Display::ZgenerateShapeByGreek(const string &outputFile, const vector<vecto
 
 void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vector<double> > &u, const vector<Vector3d> &greek, const vector<Vector2d> &greek_v,
 	const vector<Vector3d> &start_points, const Vector3d &mean_coor,
-	const vector<ZPara> &zpara)
+	const vector<ZPara> &zpara, const vector<vector<Vector3d> > &data)
 {
 	ofstream ofs("curvature.txt");
 	ofstream ofs_dir("direction.txt");
+	ofstream ofs_knot("knots.txt");
+
 	double step_ = 0.01;
 	vector<Vector3d> output_points;
 
 	int v_seglabel;
+	int knot_label;
 
 	for (int i = 0; i < greek.size(); ++i)
 	{
 		// ±éÀúÃ¿Ò»¶Î
 		ZPara para = zpara[i];
-		v_seglabel = 0;
+		v_seglabel = 0; knot_label = 0;
 		int segment_point_number = int(u[i].back() / step_ + 0.5) + 1;
 		double mu_ = greek[i](0);
 		double ka_ = greek[i](1);
@@ -313,9 +316,23 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 				ofs_dir << to_string(point_(0)) << "," << to_string(point_(1)) << "," << to_string(point_(2)) << "," << to_string(abs(direction * 1000)) << endl;
 			}
 		}
+		for (int j = 0; j < u[i].size(); j++)
+		{
+			double up = u[i][j];
+			double xx = CosIntegral(greek[i], up);
+			double yy = SinIntegral(greek[i], up);
+			Vector3d point_;
+			point_(0) = x0_ + xx + mean_coor(0); point_(1) = y0_ + yy + mean_coor(1); point_(2) = 0.0;
+			Vector3d diff = point_ - data[i][j] - mean_coor;
+			double distance2d = sqrt(diff(0)*diff(0) + diff(1)*diff(1));
+
+			point_(2) = findNearestZ(output_points, point_);
+
+			ofs_knot << to_string(point_(0)) << "," << to_string(point_(1)) << "," << to_string(point_(2)) << "," << to_string(distance2d) << endl;
+		}
 	}
 
-	ofs.close();
+	ofs.close(); ofs_dir.close(); ofs_knot.close();
 
 	int nSHPType = SHPT_POLYGONZ;
 	const int point_number = output_points.size();
@@ -349,4 +366,56 @@ void Display::ZgenerateShapeByZPara(const string &outputFile, const vector<vecto
 	SHPClose(hSHPHandle);
 
 	free(x); free(y); free(z); free(m);
+}
+
+double Display::CosIntegral(const Vector3d &para, const double &up)
+{
+	double g_iterator = up;
+	double step_ = 0.01; //ATTENTION
+
+	double x_predicted = cos(para[0])*0.5*step_;
+
+	for (long i = 0; i*step_ < g_iterator; ++i)
+		x_predicted += 2 * 0.5 * step_*cos(para[0] + para[1] * i*step_ + 0.5*para[2] * i*i*step_*step_);
+
+	double f_step = g_iterator - floor(100 * g_iterator) / 100.0;
+	x_predicted += 0.5 * f_step*cos(para[0] + para[1] * g_iterator + 0.5*para[2] * g_iterator*g_iterator);
+
+	return x_predicted;
+}
+
+double Display::SinIntegral(const Vector3d &para, const double &up)
+{
+	double g_iterator = up;
+	double step_ = 0.01; //ATTENTION
+
+	double x_predicted = sin(para[0])*0.5*step_;
+
+	for (long i = 0; i*step_ < g_iterator; ++i)
+		x_predicted += 2 * 0.5 * step_*sin(para[0] + para[1] * i*step_ + 0.5*para[2] * i*i*step_*step_);
+
+	double f_step = g_iterator - floor(100 * g_iterator) / 100.0;
+	x_predicted += 0.5 * f_step*sin(para[0] + para[1] * g_iterator + 0.5*para[2] * g_iterator*g_iterator);
+
+	return x_predicted;
+}
+
+double Display::findNearestZ(const vector<Vector3d> &points, const Vector3d &ref)
+{
+	double rst = points[0](2);
+	Vector3d dif = points[0] - ref;
+	double minDis = dif(0)*dif(0) + dif(1)*dif(1);
+
+	for (int i = 0; i < points.size(); i++)
+	{
+		dif = points[i] - ref;
+		double dis = dif(0)*dif(0) + dif(1)*dif(1);
+
+		if (dis < minDis)
+		{
+			minDis = dis;
+			rst = points[i](2);
+		}
+	}
+	return rst;
 }
