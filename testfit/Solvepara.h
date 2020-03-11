@@ -241,4 +241,22 @@ private:
 	double dir1_, dir2_, length_;
 };
 
+class CurvatureCost {
+public:
+	CurvatureCost(double cache) : cache_(cache){}
+
+	template <typename T> bool operator()(
+		const T* const para,		
+		T* residual) const {
+
+		T y_predicted = para[1];
+
+		residual[0] = (T(cache_) - y_predicted) * T(10000.0);
+		return true;
+	}
+
+private:
+	double cache_;
+};
+
 bool compPointByY(const Vector3d &a, const Vector3d &b);

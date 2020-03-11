@@ -282,6 +282,8 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 	int segment_number = input_u.size(); //有多少段
 	output_greek.resize(segment_number); output_greek_v.resize(segment_number);
 
+	double curvature_cache;
+
 	// 遍历每一段
 	for (int i = 0; i < segment_number; i++)
 	{
@@ -343,10 +345,19 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 			problem.AddResidualBlock(cost, NULL, greek_solve);
 		}
 
+		// 曲率约束
+		if (this->panel_.major_iter_num > 1 && i > 0)
+		{
+			CostFunction *cost =
+				new AutoDiffCostFunction<CurvatureCost, 1, 3>(
+				new CurvatureCost(curvature_cache));
+			problem.AddResidualBlock(cost, NULL, greek_solve);
+		}
+
 		// 待优化参数范围
 		problem.SetParameterLowerBound(greek_solve, 0, 0.00);	problem.SetParameterUpperBound(greek_solve, 0, 2 * M_PI);
-		problem.SetParameterLowerBound(greek_solve, 1, -0.05);problem.SetParameterUpperBound(greek_solve, 1, 0.05);
-		problem.SetParameterLowerBound(greek_solve, 2, -0.0025);problem.SetParameterUpperBound(greek_solve, 2, 0.0025);
+		problem.SetParameterLowerBound(greek_solve, 1, -0.05); problem.SetParameterUpperBound(greek_solve, 1, 0.05);
+		problem.SetParameterLowerBound(greek_solve, 2, -0.0025); problem.SetParameterUpperBound(greek_solve, 2, 0.0025);
 
 		Solver::Options options;
 		options.max_num_iterations = 20;
@@ -360,7 +371,7 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 
 		// 参考方向和计算方向对比
 		std::cout << "ref_dir: " << to_string(refdir(0)) << "  rst_dir: " << to_string(greek_solve[0]) << endl;
-		std::cout << "ref_dir: " << to_string(refdir(1)) << "  rst_dir: " << to_string(greek_solve[0] + greek_solve[1] * input_u[i].back() 
+		std::cout << "ref_dir: " << to_string(refdir(1)) << "  rst_dir: " << to_string(greek_solve[0] + greek_solve[1] * input_u[i].back()
 			+ 0.5*greek_solve[2] * input_u[i].back() *input_u[i].back()) << endl;
 
 		std::cout << summary.BriefReport() << "\n";
@@ -375,6 +386,8 @@ void Solvepara::solveParaByFixedU(const vector<vector<double> > &input_u, const 
 		output_greek[i](0) = greek_solve[0];
 		output_greek[i](1) = greek_solve[1];
 		output_greek[i](2) = greek_solve[2];
+
+		curvature_cache = greek_solve[1] + input_u[i].back()*greek_solve[2];
 	}
 }
 
